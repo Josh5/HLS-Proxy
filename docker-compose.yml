@@ -1,0 +1,41 @@
+---
+version: "2.4"
+
+networks:
+  private-net:
+
+services:
+  hls-proxy:
+    image: josh5/hls-proxy:latest
+    restart: no
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        BUILD_DATE: "NOW"
+        VERSION: "UNKNOWN"
+    user: "${PUID:-1000}:${PGID:-1000}"
+
+    # NETWORK:
+    networks:
+      - private-net
+    ports:
+      # WebUI Port (9987)
+      - 9987:9987
+
+    # ENVIRONMENT:
+    environment:
+      # Run with development server
+      - DEVELOPMENT=false
+      # Enables debug logging
+      - ENABLE_DEBUGGING=false
+      # The proxy URL prefix string.
+      # The default is 'proxy' which will produce the proxy URL "http://<host>:<PORT>/proxy.m3u8?url=<UPSTREAM_PLAYLIST_URL>"
+      - HLS_PROXY_PREFIX=proxy
+
+    # VOLUMES:
+    volumes:
+      # Configuration files
+      - ./dev_env/config:/config
+      # Pass in application for development
+      - ./:/app

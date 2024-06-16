@@ -1,0 +1,33 @@
+#
+# This requirements.in file manages the requirements.txt file using the pip-tools package.
+#
+# To update the requirements.txt file, run these commands:
+#   1) Install pip-tools
+#       > pip install pip-tools
+#   2) Use pip-compile to build the requirements.txt file using one of these command examples
+#       > pip-compile ./requirements.in                             # Build a requirements.txt file from the requirements.in file without modifying all the dependencies
+#       > pip-compile ./requirements.in --upgrade                   # Try to upgrade all dependencies to their latest versions
+#       > pip-compile ./requirements.in --upgrade-package flask     # Only update the flask package
+#   3) Test that all local build dependencies now install without conflict. Update requirements-dev.txt dependencies as required.
+#       > python -m pip install -r ./requirements.txt -r ./requirements-dev.txt
+#
+
+
+
+# ----------------------------- Core Packages ---------------------------- #
+#
+#   Description:    For core packages used by the project.
+#
+
+# -- Server or stand-alone executables
+Quart~=0.19
+    #   Reason:             This is the web server framework
+    #   Import example:     N/A
+
+# -- Support libraries
+aiohttp>=3.9
+    #   Reason:             Async http client/server framework (asyncio). Required for the proxy server.
+    #   Import example:     import aiohttp
+requests>=2.31.0
+    #   Reason:             HTTP requests
+    #   Import example:     import requests

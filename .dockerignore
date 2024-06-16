@@ -1,0 +1,16 @@
+.git
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+
+# dev / testing directories
+/dev_env*
+
+# venv
+env
+venv*
+
+# editor directories and files
+.vscode
+.idea
