@@ -1,4 +1,4 @@
-FROM python:3.12-alpine
+FROM python:3.12-bookworm
 
 # set version label
 ARG BUILD_DATE
@@ -10,9 +10,22 @@ LABEL maintainer="Josh.5 <jsunnex@gmail.com>"
 ENV HOME="/config"
 
 RUN \
-    echo "**** install runtime packages ****" \
-        && apk add --no-cache \
+    echo "**** update apt repositories ****" \
+        && apt-get update \
+    && \
+    echo "**** install container runtime packages ****" \
+        && apt-get install -y --no-install-recommends \
             bash \
+            ca-certificates \
+            tini \
+    && \
+    echo "**** install tic application runtime packages ****" \
+        && apt-get install -y --no-install-recommends \
+            ffmpeg \
+    && \
+    echo "**** cleanup apt cache ****" \
+        && apt-get clean \
+        && rm -rf /var/lib/apt/lists/* \
     && \
     echo
 
@@ -21,7 +34,8 @@ ENV PYTHONDONTWRITEBYTECODE="1"
 ENV PYTHONUNBUFFERED="1"
 ENV DEVELOPMENT="false"
 ENV ENABLE_DEBUGGING="false"
-ENV HLS_PROXY_PREFIX="proxy"
+ENV HLS_PROXY_PREFIX=""
+ENV HLS_PROXY_HOST_IP=""
 
 # Install python dependencies
 COPY requirements.txt /app/requirements.txt

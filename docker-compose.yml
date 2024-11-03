@@ -25,13 +25,14 @@ services:
 
     # ENVIRONMENT:
     environment:
-      # Run with development server
+      # Run with development server (watcher that auto-restarts on file changes)
       - DEVELOPMENT=false
       # Enables debug logging
       - ENABLE_DEBUGGING=false
       # The proxy URL prefix string.
-      # The default is 'proxy' which will produce the proxy URL "http://<host>:<PORT>/proxy.m3u8?url=<UPSTREAM_PLAYLIST_URL>"
-      - HLS_PROXY_PREFIX=proxy
+      - HLS_PROXY_PREFIX=
+      - HLS_PROXY_HOST_IP=
+      - HLS_PROXY_PORT=9987
 
     # VOLUMES:
     volumes:
