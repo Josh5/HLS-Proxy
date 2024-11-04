@@ -8,8 +8,7 @@
 # Last Modified: Monday, 17th June 2024 11:27:23 am
 # Modified By: Josh5 (jsunnex@gmail.com)
 ###
-
-set -e -x
+set -e
 
 # All printed log lines from this script should be formatted with this function
 print_log() {
@@ -46,6 +45,6 @@ else
     else
         # Run hypercorn server
         # REF: https://pgjones.gitlab.io/hypercorn/how_to_guides/configuring.html
-        exec hypercorn --workers=1 --bind=0.0.0.0:9987 run:app
+        exec hypercorn --workers=1 --bind=0.0.0.0:${HLS_PROXY_PORT:-9987} run:app
     fi
 fi
