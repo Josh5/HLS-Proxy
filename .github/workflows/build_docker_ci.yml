@@ -1,11 +1,9 @@
-name: Build All Packages CI
-
 on:
+  workflow_dispatch:
   push:
-    branches: ['dev-**', 'pr-**', staging, master]
-    tags: ['**']
+    branches: [master]
   pull_request:
-    branches: [staging, master]
+    branches: [master]
   schedule:
     # At 02:30 on Saturday
     - cron: '30 2 * * 6'
@@ -81,18 +79,7 @@ jobs:
 
           echo "docker_image=${DOCKER_IMAGE}" >> $GITHUB_OUTPUT
           echo "docker_tags=$(echo ${DOCKER_TAGS} | sed 's/,$//')" >> $GITHUB_OUTPUT
-          echo "docker_platforms=linux/amd64" >> $GITHUB_OUTPUT
           echo "docker_push=${DOCKER_PUSH}" >> $GITHUB_OUTPUT
-
-      # Cache the build
-      - name: Cache Docker layers
-        uses: actions/cache@v3
-        id: cache
-        with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-
 
       # Login to Docker Hub
       - name: Login to Docker Hub
@@ -105,26 +92,12 @@ jobs:
       # Run docker build and push
       - name: Docker Build and Push
         if: success()
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: docker/Dockerfile
-          platforms: ${{ steps.prepare.outputs.docker_platforms }}
+          platforms: linux/amd64,linux/arm64
           pull: true
           push: ${{ steps.prepare.outputs.docker_push }}
           tags: |
             ${{ steps.prepare.outputs.docker_tags }}
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,mode=max,dest=/tmp/.buildx-cache-new
-
-      # Keep only latest cache
-      #   https://github.com/docker/build-push-action/issues/252
-      #   https://github.com/moby/buildkit/issues/1896
-      - name: Move cache
-        if: always()
-        run: |
-          if [[ -e /tmp/.buildx-cache-new ]]; then
-            echo "Cleaning up old cache..."
-            rm -rf /tmp/.buildx-cache
-            mv -v /tmp/.buildx-cache-new /tmp/.buildx-cache
-          fi
