@@ -20,3 +20,19 @@ You can also use the base64 path format directly:
 | DEVELOPMENT      | Run with development server. Default `false`. |
 | ENABLE_DEBUGGING | Enables debug logging. Default `false`. |
 | HLS_PROXY_PREFIX | The proxy URL prefix string. The default is `proxy` which will produce the proxy URL `http://<host>:<PORT>/proxy.m3u8?url=<UPSTREAM_PLAYLIST_URL>`. |
+
+## Testing
+
+Create a virtual environment and install dependencies:
+
+```bash
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+Run the tests:
+
+```bash
+python -m unittest -v
+```

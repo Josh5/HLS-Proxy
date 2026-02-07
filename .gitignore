@@ -4,6 +4,7 @@ __pycache__/
 
 # dev / testing directories
 /dev_env*
+tests/test-urls.json
 
 # venv
 env
