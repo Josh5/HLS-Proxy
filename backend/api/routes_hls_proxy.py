@@ -10,11 +10,11 @@ import time
 import uuid
 from collections import deque
 
-from quart import current_app, Response, stream_with_context
+from quart import current_app, Response, stream_with_context, request
 
 from backend.api import blueprint
 import aiohttp
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 
 # Test:
 #       > mkfifo /tmp/ffmpegpipe
@@ -232,35 +232,43 @@ async def prefetch_segments(segment_urls):
                     proxy_logger.error("Failed to prefetch URL '%s': %s", url, e)
 
 
-def generate_base64_encoded_url(url_to_encode, extension):
+def _normalize_prefix(prefix):
+    if not prefix or prefix == "/":
+        return ""
+    return "/" + prefix.strip("/")
+
+
+def generate_base64_encoded_url(url_to_encode, extension, request_base_url=None):
     full_url_encoded = base64.b64encode(url_to_encode.encode('utf-8')).decode('utf-8')
     host_base_url = ''
     host_base_url_prefix = 'http'
     host_base_url_port = ''
+    prefix_path = _normalize_prefix(hls_proxy_prefix)
     if hls_proxy_port:
         if hls_proxy_port == '443':
             host_base_url_prefix = 'https'
         host_base_url_port = f':{hls_proxy_port}'
     if hls_proxy_host_ip:
-        host_base_url = f'{host_base_url_prefix}://{hls_proxy_host_ip}{host_base_url_port}{hls_proxy_prefix}/'
+        host_base_url = f'{host_base_url_prefix}://{hls_proxy_host_ip}{host_base_url_port}{prefix_path}'
+    elif request_base_url:
+        host_base_url = f'{request_base_url.rstrip("/")}{prefix_path}'
     return f'{host_base_url}{full_url_encoded}.{extension}'
 
 
-async def fetch_and_update_playlist(decoded_url):
+async def fetch_and_update_playlist(decoded_url, request_base_url=None):
     async with aiohttp.ClientSession() as session:
         async with session.get(decoded_url) as resp:
             if resp.status != 200:
                 return None
 
             # Get actual URL after any redirects
-            parsed_response_url = urlparse(str(resp.url))
-            response_url = f"{parsed_response_url.scheme}://{parsed_response_url.hostname}"
+            response_url = str(resp.url)
 
             # Read the original playlist content
             playlist_content = await resp.text()
 
             # Update child URLs in the playlist
-            updated_playlist = update_child_urls(playlist_content, response_url)
+            updated_playlist = update_child_urls(playlist_content, response_url, request_base_url=request_base_url)
             return updated_playlist
 
 
@@ -275,16 +283,12 @@ def get_key_uri_from_ext_x_key(line):
     return None
 
 
-def update_child_urls(playlist_content, source_url):
+def update_child_urls(playlist_content, source_url, request_base_url=None):
     proxy_logger.debug(f"Original Playlist Content:\n{playlist_content}")
 
     updated_lines = []
     lines = playlist_content.splitlines()
     segment_urls = []
-
-    # Generate the source base URL
-    parsed_source_base_url = urlparse(source_url)
-    source_base_url = f"{parsed_source_base_url.scheme}://{parsed_source_base_url.hostname}"
 
     for line in lines:
         stripped_line = line.strip()
@@ -297,9 +301,10 @@ def update_child_urls(playlist_content, source_url):
         if line.startswith("#EXT-X-KEY"):
             key_uri = get_key_uri_from_ext_x_key(line)
             if key_uri:
-                new_key_uri = generate_base64_encoded_url(key_uri, 'key')
+                absolute_key_uri = urljoin(source_url, key_uri)
+                new_key_uri = generate_base64_encoded_url(absolute_key_uri, 'key', request_base_url=request_base_url)
                 updated_lines.append(line.replace(key_uri, new_key_uri))
-                segment_urls.append(key_uri)
+                segment_urls.append(absolute_key_uri)
             else:
                 updated_lines.append(line)
             continue
@@ -311,8 +316,8 @@ def update_child_urls(playlist_content, source_url):
         extension = 'ts'
         if stripped_line.endswith('m3u8'):
             extension = 'm3u8'
-        url_to_encode = f"{source_base_url}/{stripped_line}"
-        updated_lines.append(generate_base64_encoded_url(url_to_encode, extension))
+        url_to_encode = urljoin(source_url, stripped_line)
+        updated_lines.append(generate_base64_encoded_url(url_to_encode, extension, request_base_url=request_base_url))
 
         # Add any ts files to list of segments to pre-fetch
         if extension == 'ts':
@@ -332,12 +337,27 @@ async def proxy_m3u8(encoded_url):
     # Decode the Base64 encoded URL
     decoded_url = base64.b64decode(encoded_url).decode('utf-8')
 
-    updated_playlist = await fetch_and_update_playlist(decoded_url)
+    updated_playlist = await fetch_and_update_playlist(decoded_url, request_base_url=request.host_url)
     if updated_playlist is None:
         proxy_logger.error("Failed to fetch the original playlist '%s'", decoded_url)
         return Response("Failed to fetch the original playlist.", status=404)
 
     proxy_logger.info(f"[MISS] Serving m3u8 URL '%s' without cache", decoded_url)
+    return Response(updated_playlist, content_type='application/vnd.apple.mpegurl')
+
+
+@blueprint.route('/proxy.m3u8', methods=['GET'])
+async def proxy_m3u8_url():
+    source_url = request.args.get('url')
+    if not source_url:
+        return Response("Missing url parameter", status=400)
+
+    updated_playlist = await fetch_and_update_playlist(source_url, request_base_url=request.host_url)
+    if updated_playlist is None:
+        proxy_logger.error("Failed to fetch the original playlist '%s'", source_url)
+        return Response("Failed to fetch the original playlist.", status=404)
+
+    proxy_logger.info(f"[MISS] Serving m3u8 URL '%s' without cache", source_url)
     return Response(updated_playlist, content_type='application/vnd.apple.mpegurl')
 
 

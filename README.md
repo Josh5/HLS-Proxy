@@ -10,6 +10,9 @@ See Docker compose file for example on how to run it.
 
 Once running, you can pass the playlist through to this web service. Eg: `http://localhost:9987/proxy.m3u8?url=https://example.com/playlist.m3u8`
 
+You can also use the base64 path format directly:
+`http://localhost:9987/<base64_of_playlist_url>.m3u8`
+
 ### Config:
 
 | Variable | Description |
