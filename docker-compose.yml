@@ -26,9 +26,9 @@ services:
     # ENVIRONMENT:
     environment:
       # Run with development server (watcher that auto-restarts on file changes)
-      - DEVELOPMENT=false
+      - DEVELOPMENT=true
       # Enables debug logging
-      - ENABLE_DEBUGGING=false
+      - ENABLE_DEBUGGING=true
       # The proxy URL prefix string.
       - HLS_PROXY_PREFIX=
       - HLS_PROXY_HOST_IP=

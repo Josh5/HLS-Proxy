@@ -107,21 +107,6 @@ class FFmpegStream:
                 ffmpeg_logger.error("Error reading stderr: %s", e)
                 break
 
-    def increment_connection(self):
-        with self.lock:
-            self.connection_count += 1
-            ffmpeg_logger.info("Adding new connection. Connection count now at %s", self.connection_count)
-
-    def decrement_connection(self):
-        with self.lock:
-            self.connection_count -= 1
-            ffmpeg_logger.info("Removing connection. Connection count now at %s", self.connection_count)
-
-            # Do not stop FFmpeg until all connections are closed
-            if self.connection_count == 0:
-                ffmpeg_logger.info("No more active connections. Stopping FFmpeg.")
-                threading.Thread(target=self.stop).start()
-
     def add_buffer(self, connection_id):
         with self.lock:
             if connection_id not in self.buffers:
@@ -487,7 +472,6 @@ async def stream_ts(encoded_url):
 
     # Get the existing stream
     stream = active_streams[decoded_url]
-    stream.increment_connection()
     stream.last_activity = time.time()
 
     # Add a new buffer for this connection
@@ -515,7 +499,6 @@ async def stream_ts(encoded_url):
                     break
         finally:
             stream.remove_buffer(connection_id)  # Remove the buffer on connection close
-            stream.decrement_connection()  # Decrement on connection close
 
     # Create a response object with the correct content type and set timeout to None
     response = Response(generate(), content_type='video/mp2t')
