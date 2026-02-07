@@ -504,7 +504,11 @@ def update_child_urls(playlist_content, source_url, request_base_url=None):
 @blueprint.route(f'{hls_proxy_prefix.lstrip("/")}/<encoded_url>.m3u8', methods=['GET'])
 async def proxy_m3u8(encoded_url):
     # Decode the Base64 encoded URL
-    decoded_url = base64.b64decode(encoded_url).decode('utf-8')
+    try:
+        decoded_url = base64.b64decode(encoded_url).decode('utf-8')
+    except Exception:
+        proxy_logger.error("Invalid base64 URL: %s", encoded_url)
+        return Response("Invalid base64 URL", status=400)
 
     result = await get_playlist_response(decoded_url, request_base_url=request.host_url)
     if result is None:
