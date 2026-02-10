@@ -284,7 +284,7 @@ def _normalize_prefix(prefix):
 
 
 def generate_base64_encoded_url(url_to_encode, extension, request_base_url=None):
-    full_url_encoded = base64.b64encode(url_to_encode.encode('utf-8')).decode('utf-8')
+    full_url_encoded = base64.urlsafe_b64encode(url_to_encode.encode('utf-8')).decode('utf-8')
     host_base_url = ''
     host_base_url_prefix = 'http'
     host_base_url_port = ''
@@ -304,6 +304,14 @@ def generate_base64_encoded_url(url_to_encode, extension, request_base_url=None)
         host_base_url = host_base_url.rstrip('/') + '/'
 
     return f'{host_base_url}{full_url_encoded}.{extension}'
+
+
+def _decode_base64_url(encoded_url):
+    padded = encoded_url + ("=" * (-len(encoded_url) % 4))
+    try:
+        return base64.urlsafe_b64decode(padded).decode('utf-8')
+    except Exception:
+        return base64.b64decode(padded).decode('utf-8')
 
 
 def _rewrite_playlist_line(line, source_url, request_base_url=None):
@@ -505,7 +513,7 @@ def update_child_urls(playlist_content, source_url, request_base_url=None):
 async def proxy_m3u8(encoded_url):
     # Decode the Base64 encoded URL
     try:
-        decoded_url = base64.b64decode(encoded_url).decode('utf-8')
+        decoded_url = _decode_base64_url(encoded_url)
     except Exception:
         proxy_logger.error("Invalid base64 URL: %s", encoded_url)
         return Response("Invalid base64 URL", status=400)
@@ -529,7 +537,7 @@ async def proxy_m3u8_url():
     if not source_url:
         return Response("Missing url parameter", status=400)
 
-    encoded = base64.b64encode(source_url.encode('utf-8')).decode('utf-8')
+    encoded = base64.urlsafe_b64encode(source_url.encode('utf-8')).decode('utf-8')
     base_url = request.host_url.rstrip('/')
     prefix_path = _normalize_prefix(hls_proxy_prefix)
     if prefix_path:
@@ -542,7 +550,11 @@ async def proxy_m3u8_url():
 @blueprint.route(f'{hls_proxy_prefix.lstrip("/")}/<encoded_url>.key', methods=['GET'])
 async def proxy_key(encoded_url):
     # Decode the Base64 encoded URL
-    decoded_url = base64.b64decode(encoded_url).decode('utf-8')
+    try:
+        decoded_url = _decode_base64_url(encoded_url)
+    except Exception:
+        proxy_logger.error("Invalid base64 URL: %s", encoded_url)
+        return Response("Invalid base64 URL", status=400)
 
     # Check if the .key file is already cached
     if await cache.exists(decoded_url):
@@ -565,7 +577,11 @@ async def proxy_key(encoded_url):
 @blueprint.route(f'{hls_proxy_prefix.lstrip("/")}/<encoded_url>.ts', methods=['GET'])
 async def proxy_ts(encoded_url):
     # Decode the Base64 encoded URL
-    decoded_url = base64.b64decode(encoded_url).decode('utf-8')
+    try:
+        decoded_url = _decode_base64_url(encoded_url)
+    except Exception:
+        proxy_logger.error("Invalid base64 URL: %s", encoded_url)
+        return Response("Invalid base64 URL", status=400)
 
     # Check if the .ts file is already cached
     if await cache.exists(decoded_url):
@@ -588,7 +604,11 @@ async def proxy_ts(encoded_url):
 @blueprint.route(f'{hls_proxy_prefix.lstrip("/")}/stream/<encoded_url>', methods=['GET'])
 async def stream_ts(encoded_url):
     # Decode the Base64 encoded URL
-    decoded_url = base64.b64decode(encoded_url).decode('utf-8')
+    try:
+        decoded_url = _decode_base64_url(encoded_url)
+    except Exception:
+        proxy_logger.error("Invalid base64 URL: %s", encoded_url)
+        return Response("Invalid base64 URL", status=400)
 
     # Generate a unique identifier (UUID) for the connection
     connection_id = str(uuid.uuid4())  # Use a UUID for the connection ID

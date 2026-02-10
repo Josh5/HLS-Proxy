@@ -28,7 +28,8 @@ def _decode_proxy_url(proxied_url):
     parsed = urlparse(proxied_url)
     filename = parsed.path.split("/")[-1]
     encoded = filename.split(".", 1)[0]
-    return base64.b64decode(encoded).decode("utf-8")
+    padded = encoded + ("=" * (-len(encoded) % 4))
+    return base64.urlsafe_b64decode(padded).decode("utf-8")
 
 
 def _assert(condition, message):
