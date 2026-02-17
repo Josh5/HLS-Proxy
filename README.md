@@ -28,6 +28,7 @@ Quick examples:
 | `HLS_PROXY_HOST_IP`           | Optional host/IP override used when rewriting child playlist URLs. If set, rewritten URLs use this host instead of the incoming request host.                                         |
 | `HLS_PROXY_MAX_BUFFER_BYTES`  | Max playlist size (bytes) processed in-memory before switching to streaming rewrite mode. Default `1048576` (1 MiB).                                                                  |
 | `HLS_PROXY_MAX_HISTORY_BYTES` | Per active shared stream in-memory history buffer (bytes) for prebuffer priming/new subscribers. Default `209715200` (200 MiB).                                                       |
+| `HLS_PROXY_DEFAULT_PREBUFFER` | Default prebuffer used by `/stream/<base64_url>` when no `prebuffer` query parameter is provided. Supports bytes or `K`/`M` suffixes (for example `64K`, `1M`). Default `0`.         |
 
 ### Endpoints:
 
@@ -38,7 +39,7 @@ Quick examples:
 | `GET`, `HEAD` | `/<base64_url>.ts`               | Segment proxy for TS content.            | For HLS segments. If `ffmpeg=true` or `prebuffer=<size>` is present, redirects to `/stream/<base64_url>`. If upstream content is playlist-like, redirects to `/<base64_url>.m3u8`. |
 | `GET`, `HEAD` | `/<base64_url>.key`              | HLS key proxy.                           | Fetches and caches key content.                                                                                                                                                    |
 | `GET`, `HEAD` | `/<base64_url>.vtt`              | Subtitle segment proxy.                  | Fetches and caches VTT content.                                                                                                                                                    |
-| `GET`         | `/stream/<base64_url>`           | Shared live stream multiplexer endpoint. | Use for raw/live MPEG-TS sources. Default mode is direct async upstream read; add `?ffmpeg=true` for FFmpeg mode. Supports `prebuffer=<size>` (examples: `512K`, `2M`, `35M`).     |
+| `GET`         | `/stream/<base64_url>`           | Shared live stream multiplexer endpoint. | Use for raw/live MPEG-TS sources. Default mode is direct async upstream read; add `?ffmpeg=true` for FFmpeg mode. Supports `prebuffer=<size>` and falls back to `HLS_PROXY_DEFAULT_PREBUFFER` when omitted. |
 
 If `HLS_PROXY_PREFIX` is configured, prepend it to the paths above.
 
