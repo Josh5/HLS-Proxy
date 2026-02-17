@@ -35,7 +35,6 @@ ENV PYTHONUNBUFFERED="1"
 ENV DEVELOPMENT="false"
 ENV ENABLE_DEBUGGING="false"
 ENV HLS_PROXY_PREFIX=""
-ENV HLS_PROXY_HOST_IP=""
 
 # Install python dependencies
 COPY requirements.txt /app/requirements.txt
