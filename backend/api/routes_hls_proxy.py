@@ -17,8 +17,9 @@ from backend.hls_multiplexer import (
     b64_urlsafe_encode,
     parse_size,
     mux_manager,
-    SegmentCache
+    SegmentCache,
 )
+from backend.http_headers import decode_headers_query_param, merge_headers
 
 # Global cache instance (short default TTL for HLS segments)
 hls_segment_cache = SegmentCache(ttl=120)
@@ -69,17 +70,21 @@ def _register_startup(state):
         asyncio.create_task(periodic_cache_cleanup())
 
 
-def _build_upstream_headers():
+def _configured_upstream_headers_from_query():
+    return decode_headers_query_param(request.args.get("h"))
+
+
+def _build_upstream_headers(configured_headers=None):
     headers = {}
     try:
         src = request.headers
     except Exception:
-        return headers
+        return merge_headers(preferred=configured_headers, fallback=headers)
     for name in ("User-Agent", "Referer", "Origin", "Accept", "Accept-Language"):
         value = src.get(name)
         if value:
             headers[name] = value
-    return headers
+    return merge_headers(preferred=configured_headers, fallback=headers)
 
 
 def _build_proxy_base_url():
@@ -116,13 +121,15 @@ async def proxy_m3u8(encoded_url):
 
     decoded_url = b64_urlsafe_decode(encoded_url)
 
-    headers = _build_upstream_headers()
+    configured_headers = _configured_upstream_headers_from_query()
+    headers = _build_upstream_headers(configured_headers=configured_headers)
 
     body, content_type, status, res_headers = await handle_m3u8_proxy(
         decoded_url,
         request_host_url=request.host_url,
         hls_proxy_prefix=hls_proxy_prefix,
         headers=headers,
+        headers_query_token=request.args.get("h"),
         connection_id=connection_id,
         max_buffer_bytes=hls_proxy_max_buffer_bytes,
         proxy_base_url=_build_proxy_base_url(),
@@ -136,11 +143,13 @@ async def proxy_m3u8(encoded_url):
             resp.headers[k] = v
         return resp
 
-    if hasattr(body, '__aiter__'):
+    if hasattr(body, "__aiter__"):
+
         @stream_with_context
         async def generate_playlist():
             async for chunk in body:
                 yield chunk
+
         return Response(generate_playlist(), content_type=content_type)
     return Response(body, content_type=content_type)
 
@@ -149,19 +158,28 @@ async def proxy_m3u8(encoded_url):
 async def proxy_m3u8_redirect():
     url = request.args.get("url")
     if not url:
-        return Response("Missing url parameter", status=400)
-
+        return Response("Missing url parameter.", status=400)
     encoded = b64_urlsafe_encode(url)
     connection_id = _get_connection_id(default_new=True)
     target = f"{hls_proxy_prefix.rstrip('/')}/{encoded}.m3u8"
-    return redirect(f"{target}?connection_id={connection_id}", code=302)
+    query = [("connection_id", connection_id)]
+    headers_token = (request.args.get("h") or "").strip()
+    if headers_token:
+        query.append(("h", headers_token))
+
+    return redirect(f"{target}?{urlencode(query)}", code=302)
 
 
 @blueprint.route(f"{hls_proxy_prefix.lstrip('/')}/<encoded_url>.key", methods=["GET", "HEAD"])
 async def proxy_key(encoded_url):
     # Decode the Base64 encoded URL
     decoded_url = b64_urlsafe_decode(encoded_url)
-    content, status, _ = await handle_segment_proxy(decoded_url, _build_upstream_headers(), hls_segment_cache)
+    content, status, _ = await handle_segment_proxy(
+        decoded_url,
+        _build_upstream_headers(configured_headers=_configured_upstream_headers_from_query()),
+        hls_segment_cache,
+        headers_query_token=request.args.get("h"),
+    )
     if content is None:
         return Response("Failed to fetch.", status=status)
     return Response(content, content_type="application/octet-stream")
@@ -172,7 +190,7 @@ async def proxy_ts(encoded_url):
     """
     TIC Legacy/Segment Proxy Endpoint
 
-    This endpoint serves individual .ts segments for HLS or provides a 
+    This endpoint serves individual .ts segments for HLS or provides a
     direct stream when configured.
 
     Parameters:
@@ -189,7 +207,12 @@ async def proxy_ts(encoded_url):
             target = f"{target}?{request.query_string.decode()}"
         return redirect(target, code=302)
 
-    content, status, content_type = await handle_segment_proxy(decoded_url, _build_upstream_headers(), hls_segment_cache)
+    content, status, content_type = await handle_segment_proxy(
+        decoded_url,
+        _build_upstream_headers(configured_headers=_configured_upstream_headers_from_query()),
+        hls_segment_cache,
+        headers_query_token=request.args.get("h"),
+    )
     if content is None:
         return Response("Failed to fetch.", status=status)
 
@@ -207,7 +230,12 @@ async def proxy_ts(encoded_url):
 async def proxy_vtt(encoded_url):
     # Decode the Base64 encoded URL
     decoded_url = b64_urlsafe_decode(encoded_url)
-    content, status, _ = await handle_segment_proxy(decoded_url, _build_upstream_headers(), hls_segment_cache)
+    content, status, _ = await handle_segment_proxy(
+        decoded_url,
+        _build_upstream_headers(configured_headers=_configured_upstream_headers_from_query()),
+        hls_segment_cache,
+        headers_query_token=request.args.get("h"),
+    )
     if content is None:
         return Response("Failed to fetch.", status=status)
     return Response(content, content_type="text/vtt")
@@ -224,7 +252,7 @@ async def stream_ts(encoded_url):
     Uses high-performance async socket reads. Best for 99% of streams.
 
     Fallback Mode (FFmpeg):
-    Enabled by appending '?ffmpeg=true'. Uses an external FFmpeg process to 
+    Enabled by appending '?ffmpeg=true'. Uses an external FFmpeg process to
     remux/clean the stream. Use this ONLY if 'direct' mode has playback issues.
 
     Parameters:
@@ -244,15 +272,17 @@ async def stream_ts(encoded_url):
     generator = await handle_multiplexed_stream(
         decoded_url,
         mode,
-        _build_upstream_headers(),
+        _build_upstream_headers(configured_headers=_configured_upstream_headers_from_query()),
         prebuffer_bytes,
-        connection_id
+        connection_id,
+        headers_query_token=request.args.get("h"),
     )
 
     @stream_with_context
     async def generate_stream():
         async for chunk in generator:
             yield chunk
+
     response = Response(generate_stream(), content_type="video/mp2t")
     response.timeout = None  # Disable timeout for streaming response
     return response
